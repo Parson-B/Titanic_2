@@ -19,3 +19,5 @@ print(surv_by_sex)
 #pivoting data
 piv = pd.pivot_table(training, index = 'Survived',  aggfunc=np.sum)
 print(piv)
+
+#Test line
