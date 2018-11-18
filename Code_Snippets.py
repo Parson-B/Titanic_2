@@ -50,3 +50,5 @@ ax.set_ylabel('Survival Percentage')
 
 ax.legend( (f_bar[0],m_bar[0]), ('female','male'))
 fig.suptitle('Survival Rate by Sex',fontsize=20)
+
+fig.savefig('surv_by_sex.png')
