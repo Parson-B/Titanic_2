@@ -1,4 +1,15 @@
 
+#Set local working directory 
+import os 
+import getpass
+
+#Set working directory
+os.getcwd()
+username = getpass.getuser()
+os.chdir('C:/Users/'+username+'/Desktop/PortableGit/Titanic_2')
+
+#####################################################################
+
 
 import pandas as pd
 import numpy as np
@@ -9,7 +20,7 @@ import seaborn as sns
 
 
 #import data
-training = pd.read_csv('train.csv')
+training = pd.read_csv('Data/train.csv')
 print(training.head())
 
 #grouping data
@@ -52,3 +63,18 @@ ax.legend( (f_bar[0],m_bar[0]), ('female','male'))
 fig.suptitle('Survival Rate by Sex',fontsize=20)
 
 fig.savefig('Plots/BarPlot_surv_by_sex.png')
+
+
+#Plot to show survival against Fare
+surv_by_fare = training['Survived'].groupby([training['Fare']],axis=0).agg({'Mean' : 'mean', 'Count' : 'count'})
+print(surv_by_fare)
+
+tmp=[['Fare','Survival Pct','Count']]
+#tmp=[]
+for row in surv_by_fare.iterrows():
+    index, data = row
+    tmp.append([index] + data.tolist())
+Res = pd.DataFrame(tmp[1:],columns=tmp[0])
+
+sns.jointplot(x='Fare', y='Survival Pct', data=Res).savefig('Plots/JointPlot_surv_by_fare.png')
+sns.jointplot(x='Fare', y='Survival Pct', data=Res, kind='hex',gridsize=10).savefig('Plots/JointPlot_surv_by_fare_hex.png')
