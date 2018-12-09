@@ -80,12 +80,7 @@ sns.jointplot(x='Fare', y='Survival Pct', data=Res).savefig('Plots/JointPlot_sur
 sns.jointplot(x='Fare', y='Survival Pct', data=Res, kind='hex',gridsize=10).savefig('Plots/JointPlot_surv_by_fare_hex.png')
 
 
-#Perform a binary logistic regression to indentify the prediction quality of features
-from sklearn import preprocessing
-from sklearn.linear_model import LogisticRegression
-from sklearn.cross_validation import train_test_split
-
-#Check for possible adaption to increase sample sizes
+#Check the sample size - possibly identify the need for over sampling
 training.Survived.value_counts()
 
 sns.countplot(x='Survived',data=training,palette='hls')
@@ -93,9 +88,9 @@ plt.title('Absolute Survivors and Deceased')
 plt.ylabel('Count')
 plt.savefig('Plots/Survived_counts.png')
 
+
 # Categories ['PassengerId', 'Survived', 'Pclass', 'Name', 'Sex', 'Age', 'SibSp','Parch', 'Ticket', 'Fare', 'Cabin', 'Embarked'] 
 # Examine 'Survived' and consider first ['Pclass', 'Sex', 'Age', 'Fare']
-
 for cat in ['Pclass', 'Sex', 'Age', 'Fare']:
     print(training[cat].unique())
 
@@ -125,25 +120,111 @@ plt.savefig('Plots/Histogram_Age.png')
 #First create age cohorts in intervalls of ten years
 tmp_df=training[['Age','Survived']]
 tmp_age_groups=pd.DataFrame([(tmp_df['Age'] // 10) * 10]).transpose()
-tmp_age_groups.columns=['Age Group']
+tmp_age_groups.columns=['Age_Group']
 tmp_df=pd.concat([tmp_df,tmp_age_groups],axis=1)
+#Since NaNs are not shown replace them by -1
+tmp_df['Age_Group'] = tmp_df['Age_Group'].fillna(-1)
 
-pd.crosstab(tmp_df['Age Group'],tmp_df['Survived']).plot(kind='bar')
+pd.crosstab(tmp_df['Age_Group'],tmp_df['Survived']).plot(kind='bar')
 plt.title('Survival Number by Age Groups')
 plt.xlabel('Age Group')
-plt.ylabel('Number of Survivors')
+plt.ylabel('Counts')
 plt.savefig('Plots/BarPlot_surv_by_Age_Groups_abs.png')
 
 
+#Applying tutorial from https://towardsdatascience.com/building-a-logistic-regression-in-python-step-by-step-becd4d56c9c8?gi=e0234e9e6c9e
+
+#Perform a binary logistic regression to indentify the prediction quality of features
+from sklearn import preprocessing
+from sklearn.model_selection import train_test_split
+
+# Examine 'Survived' and consider first ['Pclass', 'Sex', 'Age', 'Fare']
+mod_training = training[['Survived', 'Pclass', 'Sex', 'Age', 'Fare']].copy()
+mod_training['Age'] = mod_training['Age'].fillna(-1)
+mod_training['Sex'].replace({'female':0, 'male':1},inplace=True)
+
+#If there were significantly fewer survivors than deceased we could over sample their number
+X = mod_training.loc[:, mod_training.columns != 'Survived']
+y = mod_training.loc[:, mod_training.columns == 'Survived']
+
+#If imblearn is not installed do so using pip:
+# import pip
+# pip.main(['install','imbalanced-learn'])
+from imblearn.over_sampling import SMOTE
+
+OS = SMOTE(random_state=0)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=0)
+columns = X_train.columns
+
+OS_data_X,OS_data_y=OS.fit_sample(X_train, np.ravel(y_train))
+OS_data_X = pd.DataFrame(data=OS_data_X,columns=columns )
+OS_data_y= pd.DataFrame(data=OS_data_y,columns=['Survived'])
+
+print("length of oversampled data is ",len(OS_data_X))
+print("Number of deceased in oversampled data",len(OS_data_y[OS_data_y['Survived']==0]))
+print("Number of survivors",len(OS_data_y[OS_data_y['Survived']==1]))
+print("Proportion of survivors in oversampled data: ",len(OS_data_y[OS_data_y['Survived']==0])/len(OS_data_X))
+print("Proportion of deceased in oversampled data : ",len(OS_data_y[OS_data_y['Survived']==1])/len(OS_data_X))
+
+#Recursive Feature Elimination
+data_vars=mod_training.columns.values.tolist()
+y_cols=['Survived']
+X_cols=[i for i in data_vars if i not in y_cols]
+
+from sklearn.feature_selection import RFE
+from sklearn.linear_model import LogisticRegression
+
+logreg = LogisticRegression()
+
+rfe = RFE(logreg, 20)
+rfe = rfe.fit(OS_data_X, OS_data_y.values.ravel())
+print(rfe.support_)
+print(rfe.ranking_)
+
+#Choose the rfe supporting categories
+#Adapt for only one Sex {0,1} possible no floats
+X=OS_data_X[X_cols].round({'Sex': 0})
+y=OS_data_y['Survived']
+
+import statsmodels.api as sm
+logit_model=sm.Logit(y,X)
+result=logit_model.fit()
+print(result.summary2())
+
+#Logistic Regression
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=0)
+logreg = LogisticRegression()
+logreg.fit(X_train, y_train)
+
+y_pred = logreg.predict(X_test)
+print('Accuracy of logistic regression classifier on test set: {:.2f}'.format(logreg.score(X_test, y_test)))
+
+#Diagonal is correct the others off
+from sklearn import metrics
+from sklearn.metrics import confusion_matrix
+confusion_matrix = confusion_matrix(y_test, y_pred)
+print(confusion_matrix)
+
+from sklearn.metrics import classification_report
+print(classification_report(y_test, y_pred))
+
+from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_curve
+logit_roc_auc = roc_auc_score(y_test, logreg.predict(X_test))
+fpr, tpr, thresholds = roc_curve(y_test, logreg.predict_proba(X_test)[:,1])
+plt.figure()
+plt.plot(fpr, tpr, label='Logistic Regression (area = %0.2f)' % logit_roc_auc)
+plt.plot([0, 1], [0, 1],'r--')
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Survival Prediction')
+plt.legend(loc="lower right")
+plt.savefig('Plots/Log_ROC.png')
+plt.show()
 
 
-
-
-
-
-
-
-
-
+#Next step is to implement an ANN (Artificial Neural Network) most likely using Gradient Descent
 
 
