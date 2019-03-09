@@ -227,4 +227,73 @@ plt.show()
 
 #Next step is to implement an ANN (Artificial Neural Network) most likely using Gradient Descent
 
+#Applying tutorial from https://towardsdatascience.com/building-your-own-artificial-neural-network-from-scratch-on-churn-modeling-dataset-using-keras-in-690782f7d051
+
+#Removing Passenger name (no relevance for survival assumed) and Cabin number (for now)
+X = training.iloc[:, [x for x in range(2,12) if (x != 3 and x!=10)]].values
+y = training.iloc[:, 1].values
+
+from sklearn.preprocessing import LabelEncoder, OneHotEncoder
+
+#Making gender a number
+labelencoder_X_1 = LabelEncoder()
+X[:, 1] = labelencoder_X_1.fit_transform(X[:, 1])
+
+#Making ticket a number
+labelencoder_X_2 = LabelEncoder()
+X[:, 5] = labelencoder_X_2.fit_transform(X[:, 5])
+
+#Making embarking port a number
+#Make nans 0 first
+X[:, 7] = np.array(['0' if x is np.nan else x for x in X[:, 7]], dtype=object)
+labelencoder_X_3 = LabelEncoder()
+X[:, 7] = labelencoder_X_3.fit_transform(X[:, 7])
+
+#Removing unknown age nans 
+X[:, 2] = np.array([-1.0 if str(x) == 'nan' else x for x in X[:, 2]], dtype=object)
+
+
+onehotencoder = OneHotEncoder(categorical_features = [1])
+X = onehotencoder.fit_transform(X).toarray()
+X = X[:, 1:]
+
+
+from sklearn.model_selection import train_test_split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, random_state = 0)
+
+from sklearn.preprocessing import StandardScaler
+sc = StandardScaler()
+X_train = sc.fit_transform(X_train)
+X_test = sc.transform(X_test)
+
+
+import keras
+
+from keras.models import Sequential
+
+from keras.layers import Dense
+
+classifier = Sequential()
+
+classifier.add(Dense(output_dim = 4, init = 'uniform', activation = 'relu', input_dim = 8))
+
+classifier.add(Dense(output_dim = 4, init = 'uniform', activation = 'relu'))
+
+classifier.add(Dense(output_dim = 1, init = 'uniform', activation = 'sigmoid'))
+
+classifier.compile(optimizer = 'adam', loss = 'binary_crossentropy', metrics = ['accuracy'])
+
+classifier.fit(X_train, y_train, batch_size = 10, nb_epoch = 100)
+
+
+y_pred = classifier.predict(X_test)
+y_pred = (y_pred > 0.5)
+
+print(y_pred)
+
+from sklearn.metrics import confusion_matrix
+cm = confusion_matrix(y_test, y_pred)
+print(cm)
+
+
 
